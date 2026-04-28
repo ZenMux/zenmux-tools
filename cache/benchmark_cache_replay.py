@@ -7,6 +7,7 @@ The platform's real assistant reply is appended back into that platform's
 history before the next round.
 """
 
+import os
 import copy
 import json
 import time
@@ -353,7 +354,10 @@ def main():
         rows = run_question_group(question_group, question_group_index)
         all_rows.extend(rows)
 
-    print(json.dumps(all_rows))
+        resp_filepath = os.path.join(OUTPUT_DIR, f"{question_group_index}-resp.json")
+        with open(resp_filepath, "w", encoding="utf-8") as f:
+            f.write(json.dumps(rows))
+
     save_report(output_dir, all_rows)
 
 
