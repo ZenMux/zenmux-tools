@@ -206,13 +206,13 @@ def build_summary_rows(rows):
 
     return sorted(
         summary_rows,
-        key=lambda row: (
-            row["model"],
-            row["provider"],
-            row["question_group"],
-            row["round"],
-            row["user_question"],
-            0 if row["platform"] == "zenmux" else 1 if row["platform"] == "openrouter" else 9,
+        key=lambda summary_row: (
+            summary_row["model"],
+            summary_row["provider"],
+            summary_row["question_group"],
+            summary_row["round"],
+            summary_row["user_question"],
+            summary_row["platform"],
         ),
     )
 
