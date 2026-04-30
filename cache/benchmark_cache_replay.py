@@ -79,6 +79,7 @@ PLATFORMS = [
     {
         "name": "zenmux",
         "base_url": "https://zenmux.ai/api/v1",
+        "header_request_id": "x-zenmux-requestid",
         # TODO
         "api_key": "",
         "model": MODEL,
@@ -89,6 +90,7 @@ PLATFORMS = [
     {
         "name": "openrouter",
         "base_url": "https://openrouter.ai/api/v1",
+        "header_request_id": "x-generation-id",
         # TODO
         "api_key": "",
         "model": MODEL,
@@ -109,13 +111,6 @@ def extract_assistant_text(body):
             if isinstance(item, dict) and item.get("type") == "text":
                 parts.append(str(item.get("text", "")))
         return "".join(parts)
-    return ""
-
-
-def extract_last_user_question(messages):
-    for message in reversed(messages or []):
-        if isinstance(message, dict) and message.get("role") == "user":
-            return message.get("content", "")
     return ""
 
 
@@ -141,7 +136,7 @@ def send_chat_completion(platform, messages, round_index):
     status_code = 0
     error = ""
     body = {}
-    resp_text = ""
+    request_id = ""
     start = time.perf_counter()
 
     try:
@@ -152,7 +147,7 @@ def send_chat_completion(platform, messages, round_index):
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         status_code = response.status_code
-        resp_text = response.text
+        request_id = response.headers.get(platform.get('header_request_id'))
         try:
             body = response.json() or {}
         except ValueError:
@@ -173,8 +168,7 @@ def send_chat_completion(platform, messages, round_index):
         "mode": "replay",
         "platform": platform["name"],
         "model": platform["model"],
-        "messages": messages,
-        "resp_text": resp_text,
+        "request_id": request_id,
         "status_code": status_code,
         "error": error,
         "latency_ms": round((time.perf_counter() - start) * 1000, 2),
@@ -202,8 +196,9 @@ def build_summary_rows(rows):
                 "provider": row.get("provider", ""),
                 "question_group": row.get("question_group", ""),
                 "round": row.get("round", ""),
-                "user_question": extract_last_user_question(row.get("messages")),
+                "user_question": row.get("user_question", ""),
                 "platform": row.get("platform", ""),
+                "request_id": row.get("request_id", ""),
                 "usage_token_json": json.dumps(usage_token, ensure_ascii=False),
                 "cache_hit_rate": row.get("token_hit_rate", 0.0),
             }
@@ -266,6 +261,7 @@ def build_cache_summary_workbook(summary_rows):
         "round",
         "user_question",
         "platform",
+        "request_id",
         "usage_token_json",
         "cache_hit_rate",
     ]
@@ -292,7 +288,7 @@ def build_cache_summary_workbook(summary_rows):
         [4, 5],
     )
 
-    for cell in sheet["H"][1:]:
+    for cell in sheet["I"][1:]:
         cell.number_format = "0.00%"
 
     widths = {
@@ -302,14 +298,14 @@ def build_cache_summary_workbook(summary_rows):
         "D": 10,
         "E": 50,
         "F": 14,
-        "G": 55,
-        "H": 14,
+        "G": 24,
+        "H": 55,
+        "I": 14,
     }
     for col, width in widths.items():
         sheet.column_dimensions[col].width = width
 
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = f"A1:H{sheet.max_row}"
     return workbook
 
 
@@ -326,6 +322,7 @@ def run_question_group(question_group, question_group_index):
             row = send_chat_completion(platform, messages, round_index)
             assistant_text = row.pop("assistant_text", "")
             row["round"] = round_index
+            row["user_question"] = question
             row["question_group"] = question_group_index
             row["provider"] = extract_provider(platform)
             rows.append(row)
@@ -356,7 +353,7 @@ def main():
 
         resp_filepath = os.path.join(OUTPUT_DIR, f"{question_group_index}-resp.json")
         with open(resp_filepath, "w", encoding="utf-8") as f:
-            f.write(json.dumps(rows))
+            f.write(json.dumps(rows, ensure_ascii=False, indent=2))
 
     save_report(output_dir, all_rows)
 
